@@ -27,73 +27,113 @@
 
 # if __name__ == "__main__":
 #     main()
-
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import logging
+import asyncio
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Replace with your actual bot token
-BOT_TOKEN = "7557097031:AAExyCWJTmM8BLlhnMLm6qq-hJQaSlP_8sw"
+# Replace with your new bot token from BotFather
+BOT_TOKEN = "8172806018:AAH-ZnBWRiuqWFEG7P7ockuF_f9lwVOAPwk"
 
-# Store user chat IDs
-user_chat_ids = set()  
+# Use in-memory set to track active users during runtime only
+active_users = set()
 
-async def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /start command"""
-    chat_id = update.message.chat_id
-    user_chat_ids.add(chat_id)  # Store user ID
+    user_id = update.effective_chat.id
+    
+    # Add user to active users
+    active_users.add(user_id)
+    logger.info(f"New user joined: {user_id}")
+    
+    await update.message.reply_text(
+        "👋 Welcome to the Anonymous Message Bot!\n\n"
+        "Any message you send here will be forwarded anonymously to everyone else using this bot.\n\n"
+        "Note: User list is not stored permanently and will reset when the bot restarts."
+    )
 
-    await update.message.reply_text("👋 Welcome! Send a message, and I'll forward it anonymously to everyone.")
-
-async def forward_message(update: Update, context: CallbackContext) -> None:
-    """Sends the received message to all users anonymously"""
-    user_chat_ids.add(update.message.chat_id)  # Store sender in list
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Forwards messages anonymously to all users"""
+    if not update.message or not update.message.text:
+        return  # Ignore non-text messages
+    
+    sender_id = update.effective_chat.id
     message_text = update.message.text
-
-    # Broadcast message to all stored users
-    for chat_id in user_chat_ids:
-        if chat_id != update.message.chat_id:  # Avoid sending the message back to the sender
+    
+    # Skip command-like messages that weren't caught by filters
+    if message_text.startswith('/'):
+        return
+    
+    # Make sure sender is in active users list
+    active_users.add(sender_id)
+    
+    # Count forwarded messages
+    sent_count = 0
+    
+    # Forward message to everyone except sender
+    users_to_remove = []
+    
+    for user_id in active_users:
+        if user_id != sender_id:
             try:
-                await context.bot.send_message(chat_id=chat_id, text=f"{message_text}")
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"Anonymous: {message_text}"
+                )
+                sent_count += 1
+                await asyncio.sleep(0.05)  # Small delay to avoid rate limits
             except Exception as e:
-                logger.warning(f"Failed to send message to {chat_id}: {e}")
+                logger.warning(f"Failed to send to {user_id}: {e}")
+                users_to_remove.append(user_id)
+    
+    # Remove users who blocked the bot or deleted their account
+    for user_id in users_to_remove:
+        active_users.discard(user_id)
+    
+    # Confirm to sender
+    if sent_count > 0:
+        await update.message.reply_text(
+            f"Your message was sent to {sent_count} users."
+        )
+    else:
+        await update.message.reply_text(
+            "No users received your message. You're currently the only active user."
+        )
+    
+    logger.info(f"Message forwarded to {sent_count} users")
 
-async def admin_broadcast(update: Update, context: CallbackContext) -> None:
-    """Allows admin (you) to send a message to all users"""
-    admin_id = update.message.chat_id
-    message_text = update.message.text
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles errors in the telegram-python-bot library"""
+    logger.error(f"Exception while handling an update: {context.error}")
 
-    # Ensure admin is in the user list
-    user_chat_ids.add(admin_id)
-
-    # Broadcast message
-    for chat_id in user_chat_ids:
-        try:
-            await context.bot.send_message(chat_id=chat_id, text=f"📢 Admin Message: {message_text}")
-        except Exception as e:
-            logger.warning(f"Failed to send message to {chat_id}: {e}")
-
-def main():
-    """Main function to run the bot"""
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    # Start command
-    app.add_handler(CommandHandler("start", start))
-
-    # Handle user messages
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message))
-
-    # Allow admin to broadcast messages
-    app.add_handler(MessageHandler(filters.TEXT & filters.User("YOUR_ADMIN_USER_ID"), admin_broadcast))
-
-    print("🤖 Bot is running...")
-    logger.info("Bot started successfully")
-
-    app.run_polling(drop_pending_updates=True, timeout=60)
+def main() -> None:
+    """Starts the bot"""
+    # Create the Application
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start))
+    
+    # Add message handler
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Register error handler
+    application.add_error_handler(error_handler)
+    
+    # Start the Bot with proper error handling
+    try:
+        # Clean start with no pending updates
+        logger.info("Starting bot...")
+        application.run_polling(
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES
+        )
+    except Exception as e:
+        logger.critical(f"Critical error starting bot: {e}")
 
 if __name__ == "__main__":
     main()
