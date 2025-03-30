@@ -27,7 +27,6 @@
 
 # if __name__ == "__main__":
 #     main()
-
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 import logging
@@ -40,7 +39,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = "7557097031:AAGhadcZUMzxAAmxarFzZi4boeoyUCvem9c"
 
 # Replace with your actual group ID
-GROUP_CHAT_ID = -1002437807718 
+GROUP_CHAT_ID = -1002437807718  
 
 # Store user messages for replies
 user_message_map = {}
@@ -86,8 +85,8 @@ def main():
     # Listen to messages in the group and forward them
     app.add_handler(MessageHandler(filters.Chat(GROUP_CHAT_ID) & filters.TEXT, forward_group_message))
 
-    # Listen to replies in bot's private chat
-    app.add_handler(MessageHandler(filters.Private & filters.TEXT, reply_to_group))
+    # Listen to replies in bot's private chat (FIXED)
+    app.add_handler(MessageHandler(filters.ChatType.PRIVATE & filters.TEXT, reply_to_group))
 
     print("🤖 Bot is running...")
     app.run_polling()
