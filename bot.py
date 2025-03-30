@@ -92,7 +92,7 @@ def main():
     print("🤖 Bot is running...")
     logger.info("Bot started successfully")
 
-    app.run_polling(drop_pending_updates=True, timeout=60, read_latency=30)
+    app.run_polling(drop_pending_updates=True, timeout=60)
 
 if __name__ == "__main__":
     main()
