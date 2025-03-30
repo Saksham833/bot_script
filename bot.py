@@ -97,17 +97,17 @@
 
 # if __name__ == "__main__":
 #     main()
-
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 import logging
 import os
+import asyncio
 
 # Enable logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Replace with your actual bot token
+# Your corrected token
 BOT_TOKEN = "7557097031:AAExyCWJTmM8BLlhnMLm6qq-hJQaSlP_8sw"
 
 # Store user chat IDs - use a file for persistence
@@ -177,11 +177,22 @@ async def stats(update: Update, context: CallbackContext) -> None:
     """Provide stats about the number of users"""
     await update.message.reply_text(f"📊 Current number of users: {len(user_chat_ids)}")
 
-def main():
-    """Main function to run the bot"""
-    # Always use drop_pending_updates=True to avoid the conflict error
+# Error handler function
+async def error_handler(update: object, context: CallbackContext) -> None:
+    logger.error(f"Exception while handling an update: {context.error}")
+    
+async def setup_bot():
+    """Initialize the bot with clean session"""
+    # Setup the application with a retry
     app = Application.builder().token(BOT_TOKEN).build()
-
+    
+    # First attempt to clean up any webhook and pending updates
+    try:
+        await app.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Successfully cleared webhook and pending updates")
+    except Exception as e:
+        logger.error(f"Error clearing webhook: {e}")
+    
     # Command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats))
@@ -189,12 +200,46 @@ def main():
     # Handle user messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message))
 
-    # Set proper polling parameters to avoid conflicts
-    print("🤖 Bot is running...")
-    logger.info(f"Bot started successfully with {len(user_chat_ids)} users loaded")
+    # Add error handler
+    app.add_error_handler(error_handler)
+    
+    return app
 
-    # The key fix for the conflict error is setting drop_pending_updates=True
-    app.run_polling(drop_pending_updates=True)
+async def main_async():
+    """Async main function with retries"""
+    # Try to start the bot with multiple attempts
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            app = await setup_bot()
+            
+            print(f"🤖 Bot is running (attempt {attempt}/{max_attempts})...")
+            logger.info(f"Bot started successfully with {len(user_chat_ids)} users loaded")
+            
+            await app.start()
+            await app.updater.start_polling(drop_pending_updates=True, 
+                                           allowed_updates=Update.ALL_TYPES,
+                                           close_loop=False)
+            
+            # Keep the bot running
+            await app.updater.stop()
+            await app.stop()
+            break  # Exit the loop if successful
+        
+        except Exception as e:
+            logger.error(f"Failed to start bot (attempt {attempt}/{max_attempts}): {e}")
+            
+            if attempt < max_attempts:
+                # Wait before retry with exponential backoff
+                wait_time = 5 * attempt
+                logger.info(f"Retrying in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error("Failed to start bot after multiple attempts. Please check Telegram API status.")
+
+def main():
+    """Entry point to run the async main function"""
+    asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()
