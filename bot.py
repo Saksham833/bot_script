@@ -4,12 +4,12 @@ import logging
 import asyncio
 from datetime import datetime
 
-# Enable logging
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Replace with your new bot token from BotFather
-BOT_TOKEN = "7557097031:AAGhadcZUMzxAAmxarFzZi4boeoyUCvem9c"
+BOT_TOKEN = "7557097031:AAHW0Rdppzlnm6c6s2Q_71XRx_48M_q00c0"
+
 
 # Use in-memory sets to track users
 active_users = set()
