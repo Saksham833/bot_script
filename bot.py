@@ -108,7 +108,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=lo
 logger = logging.getLogger(__name__)
 
 # Replace with your actual bot token
-BOT_TOKEN = "7557097031:AAEoOZYnnc-kr0k8Y12g8q81h4EyHQZgvK0"
+BOT_TOKEN = "7557097031:AAExyCWJTmM8BLlhnMLm6qq-hJQaSlP_8sw"
 
 # Store user chat IDs - use a file for persistence
 USER_DATA_FILE = "user_chat_ids.txt"
