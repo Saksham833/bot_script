@@ -1,33 +1,3 @@
-# from telegram import Update
-# from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
-# import asyncio
-
-# # Replace with your actual bot token
-# BOT_TOKEN = "7557097031:AAGhadcZUMzxAAmxarFzZi4boeoyUCvem9c"
-
-# # Replace with your actual group chat ID
-# GROUP_CHAT_ID = -1002437807718  
-
-# async def start(update: Update, context: CallbackContext) -> None:
-#     await update.message.reply_text("Send me a message, and I'll post it anonymously in the group.")
-
-# async def forward_message(update: Update, context: CallbackContext) -> None:
-#     user_message = update.message.text
-#     if user_message:
-#         await context.bot.send_message(chat_id=GROUP_CHAT_ID, text=f"Anonymous: {user_message}")
-
-# def main():
-#     app = Application.builder().token(BOT_TOKEN).build()
-    
-#     app.add_handler(CommandHandler("start", start))
-#     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, forward_message))
-
-#     print("Bot is running...")
-#     app.run_polling()
-
-# if __name__ == "__main__":
-#     main()
-
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import logging
@@ -39,10 +9,11 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=lo
 logger = logging.getLogger(__name__)
 
 # Replace with your new bot token from BotFather
-BOT_TOKEN = "7557097031:AAHW0Rdppzlnm6c6s2Q_71XRx_48M_q00c0"
+BOT_TOKEN = "7557097031:AAGhadcZUMzxAAmxarFzZi4boeoyUCvem9c"
 
-# Use in-memory set to track active users during runtime only
+# Use in-memory sets to track users
 active_users = set()
+suspended_users = set()
 
 # Dictionary to track message delivery stats
 message_stats = {}
@@ -90,10 +61,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Make sure sender is in active users list
     active_users.add(sender_id)
     
+    # Reactivate suspended users if possible
+    users_to_reactivate = []
+    for user_id in suspended_users:
+        try:
+            await context.bot.send_chat_action(chat_id=user_id, action="typing")
+            users_to_reactivate.append(user_id)
+        except:
+            pass  # User is still unreachable
+    
+    # Move reactivated users back to active list
+    for user_id in users_to_reactivate:
+        suspended_users.remove(user_id)
+        active_users.add(user_id)
+    
     # Count forwarded messages
     sent_count = 0
-    
-    # Forward message to everyone except sender
     users_to_remove = []
     
     for user_id in active_users:
@@ -109,17 +92,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 logger.warning(f"Failed to send to {user_id}: {e}")
                 users_to_remove.append(user_id)
     
-    # Remove users who blocked the bot or deleted their account
+    # Move failed users to suspended instead of removing them
     for user_id in users_to_remove:
         active_users.discard(user_id)
+        suspended_users.add(user_id)
     
-    # Store message stats for the /user command without sending a confirmation
+    # Store message stats for the /user command
     message_stats[sender_id] = {
         'recipient_count': sent_count,
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-    
-    # No confirmation message sent to the user
     
     logger.info(f"Message forwarded to {sent_count} users")
 
@@ -129,7 +111,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main() -> None:
     """Starts the bot"""
-    # Create the Application
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Add command handlers
@@ -144,12 +125,8 @@ def main() -> None:
     
     # Start the Bot with proper error handling
     try:
-        # Clean start with no pending updates
         logger.info("Starting bot...")
-        application.run_polling(
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES
-        )
+        application.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         logger.critical(f"Critical error starting bot: {e}")
 
